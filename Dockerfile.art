@@ -1,5 +1,6 @@
-FROM golang:1.24 AS builder
+FROM registry-proxy.engineering.redhat.com/rh-osbs/openshift-golang-builder:v1.24.6-202510150934.g4284440.el9 AS builder
 
+ENV GOEXPERIMENT=strictfipsruntime
 ENV CGO_ENABLED=1
 ENV GOOS=linux
 ENV GOFLAGS=""
@@ -16,8 +17,6 @@ COPY --from=builder /opt/app-root/src/opa-openshift/opa-openshift /usr/bin/opa-o
 EXPOSE 80
 ENTRYPOINT ["/usr/bin/opa-openshift"]
 
-ARG OPA_OPENSHIFT_COMMIT
-ARG OPA_OPENSHIFT_URL
 LABEL com.redhat.component="opa-openshift-container" \
       description="An OPA-compatible API for making OpenShift access review requests" \
       distribution-scope="subscription" \

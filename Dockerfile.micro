@@ -1,0 +1,49 @@
+FROM registry.redhat.io/openshift/golang-builder:golang-builder-v1.26-rhel9 AS builder
+
+RUN dnf update -y crypto-policies-scripts
+RUN update-crypto-policies --set DEFAULT:PQ
+
+ENV GOEXPERIMENT=strictfipsruntime
+ENV CGO_ENABLED=1
+ENV GOOS=linux
+ENV GOFLAGS=""
+
+COPY . /opt/app-root/src/opa-openshift
+WORKDIR /opt/app-root/src/opa-openshift
+
+RUN go build -tags strictfipsruntime -a -ldflags '-s -w' -o ./opa-openshift .
+
+# Install runtime CA certificates into a staging root for the ubi-micro final image
+RUN mkdir -p /mnt/rootfs && \
+    dnf install -y --installroot=/mnt/rootfs \
+      --releasever=9 \
+      --setopt=install_weak_deps=false \
+      --nodocs \
+      ca-certificates && \
+    dnf --installroot=/mnt/rootfs clean all
+
+FROM registry.access.redhat.com/ubi9/ubi-micro:9.8
+
+COPY --from=builder /mnt/rootfs/ /
+
+COPY --from=builder /etc/crypto-policies/ /etc/crypto-policies/
+COPY --from=builder /opt/app-root/src/opa-openshift/opa-openshift /usr/bin/opa-openshift
+
+EXPOSE 80
+ENTRYPOINT ["/usr/bin/opa-openshift"]
+
+LABEL com.redhat.component="opa-openshift-container" \
+      description="An OPA-compatible API for making OpenShift access review requests" \
+      distribution-scope="subscription" \
+      io.k8s.description="An OPA-compatible API for making OpenShift access review requests" \
+      io.k8s.display-name="OPA OpenShift" \
+      io.openshift.maintainer.component="Logging" \
+      io.openshift.maintainer.product="OpenShift Container Platform" \
+      io.openshift.tags="openshift,logging,loki" \
+      maintainer="AOS Logging <team-logging@redhat.com>" \
+      name="openshift-logging/opa-openshift-rhel9" \
+      summary="An OPA-compatible API for making OpenShift access review requests" \
+      url="https://github.com/observatorium/opa-openshift/" \
+      vendor="Red Hat, Inc." \
+      version_minor="v0.1" \
+      version=v0.1.0
